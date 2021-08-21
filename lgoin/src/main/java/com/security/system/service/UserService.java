@@ -1,0 +1,100 @@
+package com.security.system.service;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.google.common.collect.ImmutableMap;
+import com.security.system.entity.Role;
+import com.security.system.entity.User;
+import com.security.system.entity.UserRole;
+import com.security.system.enums.RoleType;
+import com.security.system.exception.RoleNotFoundException;
+import com.security.system.exception.UserNameAlreadyExistException;
+import com.security.system.exception.UserNameNotFoundException;
+import com.security.system.repository.RoleRepository;
+import com.security.system.repository.UserRepository;
+import com.security.system.repository.UserRoleRepository;
+import com.security.system.web.representation.UserRepresentation;
+import com.security.system.web.request.UserRegisterRequest;
+import com.security.system.web.request.UserUpdateRequest;
+
+import lombok.RequiredArgsConstructor;
+
+/**
+ * @author shuang.kou
+ */
+@Service
+@RequiredArgsConstructor(onConstructor = @__(@Autowired))
+public class UserService {
+
+    public static final String USERNAME = "username:";
+    private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final UserRoleRepository userRoleRepository;
+    private final BCryptPasswordEncoder bCryptPasswordEncoder;
+
+    @Transactional(rollbackFor = Exception.class)
+    public void save(UserRegisterRequest userRegisterRequest) {
+        ensureUserNameNotExist(userRegisterRequest.getUserName());
+        User user = userRegisterRequest.toUser();
+        user.setPassword(bCryptPasswordEncoder.encode(userRegisterRequest.getPassword()));
+        userRepository.save(user);
+        // 默认给用户绑定两个角色：用户和管理者
+        Role userRole = roleRepository.findByName(RoleType.USER.getName()).orElseThrow(() -> new RoleNotFoundException(ImmutableMap.of("roleName", RoleType.USER.getName())));
+        Role managerRole = roleRepository.findByName(RoleType.MANAGER.getName()).orElseThrow(() -> new RoleNotFoundException(ImmutableMap.of("roleName", RoleType.MANAGER.getName())));
+        
+        List<UserRole> userRoleList = new ArrayList<>(8);
+        userRoleList.add(new UserRole(user, userRole));
+        userRoleList.add(new UserRole(user, managerRole));
+        userRoleRepository.saveAll(userRoleList);
+    }
+
+    public User find(String userName) {
+        return userRepository.findByUserName(userName).orElseThrow(() -> new UserNameNotFoundException(ImmutableMap.of(USERNAME, userName)));
+    }
+
+    public void update(UserUpdateRequest userUpdateRequest) {
+        User user = find(userUpdateRequest.getUserName());
+        if (Objects.nonNull(userUpdateRequest.getFullName())) {
+            user.setFullName(userUpdateRequest.getFullName());
+        }
+        if (Objects.nonNull(userUpdateRequest.getPassword())) {
+            user.setPassword(bCryptPasswordEncoder.encode(userUpdateRequest.getPassword()));
+        }
+        if (Objects.nonNull(userUpdateRequest.getEnabled())) {
+            user.setEnabled(userUpdateRequest.getEnabled());
+        }
+        userRepository.save(user);
+    }
+
+
+    public void delete(String userName) {
+        if (!userRepository.existsByUserName(userName)) {
+            throw new UserNameNotFoundException(ImmutableMap.of(USERNAME, userName));
+        }
+        userRepository.deleteByUserName(userName);
+    }
+
+    public Page<UserRepresentation> getAll(int pageNum, int pageSize) {
+        return userRepository.findAll(PageRequest.of(pageNum, pageSize)).map(User::toUserRepresentation);
+    }
+
+    public boolean check(String currentPassword, String password) {
+        return this.bCryptPasswordEncoder.matches(currentPassword, password);
+    }
+
+    private void ensureUserNameNotExist(String userName) {
+        boolean exist = userRepository.findByUserName(userName).isPresent();
+        if (exist) {
+            throw new UserNameAlreadyExistException(ImmutableMap.of(USERNAME, userName));
+        }
+    }
+}

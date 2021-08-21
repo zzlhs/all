@@ -1,0 +1,17 @@
+
+server:
+  port: 8090
+spring:  
+  dubbo:
+    application:  
+      name: dubboProvider
+      id: dubboProvider
+    registry:
+      protocol: zookeeper
+      address: 127.0.0.1:2181 # 注册中心地址
+    protocol:
+      name: dubbo
+      port: 22301
+    scan: com.zzl.dubbo # package name
+provider: 
+  fundURLs: 127.0.0.1 127.0.0.2 192.168.1.103

@@ -1,0 +1,17 @@
+
+server:
+  port: 8091
+
+spring:  
+  dubbo:
+    application:  
+      name: dubboConsumer
+      id: dubboConsumer
+    registry:
+      protocol: zookeeper
+      address: 127.0.0.1:2181 # 注册中心地址
+    protocol:
+      name: dubbo
+      port: 22302
+    scan: com.zzl.dubbo # package name
+
